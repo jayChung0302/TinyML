@@ -1,0 +1,166 @@
+from TinyML.utils import accuracy
+from __future__ import absolute_import
+from __future__ import print_function
+from __future__ import division
+import os, sys
+import argparse
+import logging
+import time
+from tqdm import tqdm
+from datetime import datetime
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+import torchvision.models as models
+
+# from apex import amp
+from utils import create_exp_dir, save_checkpoint
+
+parser = argparse.ArgumentParser(description='Regular training')
+parser.add_argument('--data_dir', type=str, help='Dataset directory', default='/dataset')
+parser.add_argument('--exp_name', type=str, default='dryrun', help='denote experiment name')
+parser.add_argument('--checkpoint_path', type=str, default='checkpoint', help='checkpoint path')
+parser.add_argument('--save_path', type=str, default='exp', help='checkpoint path')
+parser.add_argument('--num_epoch', type=int, default=200, help='number of total epochs to run')
+parser.add_argument('--batch_size', type=int, default=128, help='The size of batch')
+parser.add_argument('--lr', type=float, default=0.1, help='initial learning rate')
+parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
+parser.add_argument('--weight_decay', type=float, default=1e-4, help='weight decay')
+parser.add_argument('--num_classes', type=int, default=10, help='number of classes')
+parser.add_argument('--cuda', type=int, default=1)
+parser.add_argument('--use_fp16', action='store_true', help='using FP16')
+
+# continue training
+parser.add_argument('--is_continue', action='store_true', help='continue training')
+parser.add_argument('--load_path', type=str, default=None, help='path for loading checkpoint')
+
+#TODO:
+# amp
+# continuing
+# finetuning
+# TinyTL
+
+args, _ = parser.parse_known_args()
+
+args.exp_path = os.path.join(args.save_path, args.exp_name)
+create_exp_dir(args.exp_path)
+
+log_format = '%(message)s'
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, format=log_format)
+fh = logging.FileHandler(os.path.join(args.exp_path, 'log.txt'))
+fh.setFormatter(logging.Formatter(log_format))
+logging.getLogger().addHandler(fh)
+
+def main():
+    logging.info(f'Experiment date: {datetime.today().strftime("%Y-%m-%d-%H-%M")}')
+    logging.info(vars(args))
+    writer = SummaryWriter(f'logs/{args.exp_name}')
+    net = models.squeezenet1_1(pretrained=True)
+    head = nn.Linear(in_features=512, out_features=args.num_classes)
+    net.classifier[1] = head
+
+    if args.cuda:
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device("cpu")
+
+    criterion = nn.CrossEntropyLoss().to(device)
+
+    optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum, \
+        weight_decay=args.weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0)
+    
+    mean = (0.4914, 0.4822, 0.4465)
+    std = (0.2470, 0.2435, 0.2616)
+
+    train_transform = transforms.Compose([
+			transforms.Pad(4, padding_mode='reflect'),
+			transforms.RandomCrop(32),
+			transforms.RandomHorizontalFlip(),
+			transforms.ToTensor(),
+			transforms.Normalize(mean=mean,std=std)
+		])
+    val_transform = transforms.Compose([
+			transforms.CenterCrop(32),
+			transforms.ToTensor(),
+			transforms.Normalize(mean=mean,std=std)
+		])
+
+    data_transforms = {'train': train_transform, 'val': val_transform}
+    image_datasets = {x: datasets.ImageFolder(os.path.join(args.data_dir, x), data_transforms[x]) \
+        for x in ['train', 'val']}
+    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, shuffle=True, num_workers=4) \
+        for x in ['train', 'val']}
+    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
+    class_names = image_datasets['train'].classes
+
+
+    # optimizer, utilizer
+    if args.use_fp16:
+        net, _ = amp.initialize(net, [], opt_level="O2")
+    best_acc = 0
+    for epoch in range(1, args.num_epoch+1):
+        logging.info('training session start')
+        epoch_start_time = time.time()
+        for phase in ['train', 'valid']:
+            running_loss = 0.0
+            running_corrects = 0
+
+            if phase == 'train':
+                scheduler.step()
+                net.train()
+            else:
+                net.eval()
+
+            for i, (inputs, labels) in enumerate(dataloaders[phase]):
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+                optimizer.zero_grad()
+
+                with torch.set_grad_enabled(phase == 'train'):
+                    outputs = net(inputs)
+                    _, preds = torch.max(outputs, 1)
+                    loss = criterion(outputs, labels)
+
+                    if phase == 'train':
+                        loss.backward()
+                        optimizer.step()
+
+                # loss is already divided by the batch size
+                running_loss += loss.item() * inputs.size(0)
+                running_corrects += torch.sum(preds == labels.data)
+                if i % 1000 == 999:
+                    idx = epoch * dataset_sizes[phase] + i
+                    writer.add_scalar(phase, running_loss/i, idx)
+                    writer.add_scalar(phase, running_corrects/i, idx)
+
+            epoch_loss = running_loss / dataset_sizes[phase]
+            epoch_acc = running_corrects.double() / dataset_sizes[phase]
+
+            logging(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+
+            is_best = False
+            if phase == 'val' and epoch_acc > best_acc:
+                best_acc = epoch_acc
+                is_best = True
+            
+            logging.info('Saving models......')
+            save_checkpoint({
+                    'last_epoch': epoch,
+                    'acc': epoch_acc,
+                    'loss': epoch_loss,
+                    'net_state_dict': net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict()}, \
+                        is_best, args.exp_path),                    
+
+        epoch_duration = time.time() - epoch_start_time
+        logging.info(f'Epoch time: {int(epoch_duration)}s')
+
+if __name__ == '__main__':
+    main()
