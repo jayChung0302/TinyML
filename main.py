@@ -38,9 +38,10 @@ parser.add_argument('--is_continue', action='store_true', help='continue trainin
 parser.add_argument('--load_path', type=str, default=None, help='path for loading checkpoint')
 
 #TODO:
-# continuing
+# Continuing
 # finetuning
 # TinyTL
+# Config
 
 args, _ = parser.parse_known_args()
 if args.use_amp:
@@ -163,12 +164,12 @@ def main():
                     for name, weight in net.named_parameters():
                         writer.add_histogram(name, weight, epoch)
                         writer.add_histogram(f'{name}.grad', weight.grad, epoch)
-                    logging.info(f'acc: {acc_iters:.4f}, loss: {loss_iters:.4f}, ({i}/{idx})')
+                    logging.info(f'Acc: {acc_iters:.4f}, Loss: {loss_iters:.4f}, ({i}/{idx})')
 
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
-            logging.info(f'EPOCH:({epoch}/{args.num_epoch}) {phase} mode || Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+            logging.info(f'EPOCH:({epoch}/{args.num_epoch}) {phase} mode || Acc: {epoch_acc:.4f} Loss: {epoch_loss:.4f}')
 
             is_best = False
             if phase == 'val' and epoch_acc > best_acc:
