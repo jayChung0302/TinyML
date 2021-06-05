@@ -17,7 +17,6 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
-# from apex import amp
 from utils import accuracy, save_checkpoint, create_exp_dir
 
 parser = argparse.ArgumentParser(description='Regular training')
@@ -32,19 +31,20 @@ parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=1e-3, help='weight decay')
 parser.add_argument('--num_classes', type=int, default=10, help='number of classes')
 parser.add_argument('--cuda', type=int, default=1)
-parser.add_argument('--use_fp16', action='store_true', help='using FP16')
+parser.add_argument('--use_amp', action='store_true', help='using FP16')
 parser.add_argument('--log_cycle', type=float, default=0.1, help='tensorboard logging frequency')
 # continue training
 parser.add_argument('--is_continue', action='store_true', help='continue training')
 parser.add_argument('--load_path', type=str, default=None, help='path for loading checkpoint')
 
 #TODO:
-# amp
 # continuing
 # finetuning
 # TinyTL
 
 args, _ = parser.parse_known_args()
+if args.use_amp:
+    from apex import amp
 
 args.exp_path = os.path.join(args.save_path, args.exp_name)
 create_exp_dir(args.exp_path)
@@ -61,8 +61,10 @@ def main():
     writer = SummaryWriter(f'logs/{args.exp_name}')
     if args.cuda:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        pin_memory = True
     else:
         device = torch.device("cpu")
+        pin_memory = False
 
     net = models.mobilenet_v2(pretrained=True)
     head = nn.Linear(in_features=1280, out_features=args.num_classes)
@@ -103,7 +105,8 @@ def main():
     image_datasets['train'] = datasets.CIFAR10(root='./dataset', train=True, download=True, transform=data_transforms['train'])
     image_datasets['val'] = datasets.CIFAR10(root='./dataset', train=False, download=True, transform=data_transforms['val'])
 
-    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, shuffle=True, num_workers=4) \
+    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, \
+        shuffle=True, num_workers=4, pin_memory=pin_memory) \
         for x in ['train', 'val']}
     dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
     class_names = image_datasets['train'].classes
@@ -111,11 +114,12 @@ def main():
     num_cycle = {x: int(num_iter[x] * args.log_cycle) for x in ['train', 'val']}
     logging.info(f'number of iter: {num_iter}')
     logging.info(f'iter cycle for tensorboard: {num_cycle}')
-    logging.info('training start!')
+    logging.info('training start ......!')
     training_start_time = time.time()
-    # optimizer, utilizer
-    if args.use_fp16:
-        net, _ = amp.initialize(net, [], opt_level="O2")
+
+    if args.use_amp:
+        # amp initialization
+        net, optimizer = amp.initialize(net, optimizer, opt_level="O1")
         
     best_acc = 0
     for epoch in range(1, args.num_epoch+1):
@@ -140,7 +144,10 @@ def main():
                     loss = criterion(outputs, labels)
 
                     if phase == 'train':
-                        loss.backward()
+                        if args.use_amp:
+                            with amp.scale_loss(loss, optimizer) as scaled_loss:
+                                scaled_loss.backward()
+                        else: loss.backward()
                         optimizer.step()
                         scheduler.step()
 
@@ -153,7 +160,10 @@ def main():
                     acc_iters = running_corrects/((i+1)*args.batch_size)
                     writer.add_scalar(f'{phase}/loss', loss_iters, idx)
                     writer.add_scalar(f'{phase}/accuracy', acc_iters, idx)
-                    logging.info(f'acc: {acc_iters}, loss: {loss_iters}, ({i}/{idx})')
+                    for name, weight in net.named_parameters():
+                        writer.add_histogram(name, weight, epoch)
+                        writer.add_histogram(f'{name}.grad', weight.grad, epoch)
+                    logging.info(f'acc: {acc_iters:.4f}, loss: {loss_iters:.4f}, ({i}/{idx})')
 
 
             epoch_loss = running_loss / dataset_sizes[phase]
@@ -166,17 +176,20 @@ def main():
                 is_best = True
             
             logging.info('Saving models......')
-            save_checkpoint({
-                    'last_epoch': epoch,
+            stats = {'last_epoch': epoch,
                     'acc': epoch_acc,
                     'loss': epoch_loss,
                     'net_state_dict': net.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict()}, \
-                        is_best, args.exp_path),                    
+                    'scheduler_state_dict': scheduler.state_dict(),}
+            
+            if args.use_amp:
+                stats['amp_state_dict'] = amp.state_dict()
+
+            save_checkpoint(stats, is_best, args.exp_path),                    
 
         epoch_duration = time.time() - epoch_start_time
-        logging.info(f'Epoch time: {int(epoch_duration)}s')
+        logging.info(f'epoch duration: {int(epoch_duration)}s')
     logging.info(f'End of training, whole session took {int(time.time() - training_start_time)}s')
     logging.info(f'Best validation accuracy: {best_acc}')
 
