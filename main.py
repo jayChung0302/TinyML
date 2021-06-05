@@ -42,6 +42,9 @@ parser.add_argument('--load_path', type=str, default=None, help='path for loadin
 # finetuning
 # TinyTL
 # Config
+# progressive learning
+# regularization turn off
+# torchlars
 
 args, _ = parser.parse_known_args()
 if args.use_amp:
@@ -169,25 +172,25 @@ def main():
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
-            logging.info(f'EPOCH:({epoch}/{args.num_epoch}) {phase} mode || Acc: {epoch_acc:.4f} Loss: {epoch_loss:.4f}')
+            logging.info(f'EPOCH:({epoch}/{args.num_epoch}) {phase} mode || Acc: {epoch_acc:.4f}, Loss: {epoch_loss:.4f}')
 
-            is_best = False
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                is_best = True
-            
-            logging.info('Saving models......')
-            stats = {'last_epoch': epoch,
-                    'acc': epoch_acc,
-                    'loss': epoch_loss,
-                    'net_state_dict': net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),}
-            
-            if args.use_amp:
-                stats['amp_state_dict'] = amp.state_dict()
+            if phase == 'val':
+                is_best = False
+                if epoch_acc > best_acc:
+                    best_acc = epoch_acc
+                    is_best = True
+                logging.info('Saving models......')
+                stats = {'last_epoch': epoch,
+                        'acc': epoch_acc,
+                        'loss': epoch_loss,
+                        'net_state_dict': net.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'scheduler_state_dict': scheduler.state_dict(),}
+                
+                if args.use_amp:
+                    stats['amp_state_dict'] = amp.state_dict()
 
-            save_checkpoint(stats, is_best, args.exp_path),                    
+                save_checkpoint(stats, is_best, args.exp_path)
 
         epoch_duration = time.time() - epoch_start_time
         logging.info(f'epoch duration: {int(epoch_duration)}s')
