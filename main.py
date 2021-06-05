@@ -63,12 +63,11 @@ def main():
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device("cpu")
-    net = models.mobilenet_v3_small(pretrained=True)
-    head = nn.Linear(in_features=1024, out_features=args.num_classes)
-    net.classifier[3] = head
+
+    net = models.mobilenet_v2(pretrained=True)
+    head = nn.Linear(in_features=1280, out_features=args.num_classes)
+    net.classifier[1] = head
     net = net.to(device)
-
-
 
     criterion = nn.CrossEntropyLoss().to(device)
 
@@ -91,8 +90,13 @@ def main():
 			transforms.ToTensor(),
 			transforms.Normalize(mean=mean,std=std)
 		])
-
+    
     data_transforms = {'train': train_transform, 'val': val_transform}
+    logging.info(f'{net.__class__.__name__}')
+    logging.info(f'{data_transforms}')
+    logging.info(f'{optimizer}')
+    logging.info(f'{scheduler.__class__.__name__}: {scheduler.state_dict()}')
+
     # image_datasets = {x: datasets.ImageFolder(os.path.join(args.data_dir, x), data_transforms[x]) \
     #     for x in ['train', 'val']}
     image_datasets = {}
@@ -105,13 +109,14 @@ def main():
     class_names = image_datasets['train'].classes
     num_iter = {x: dataset_sizes[x]//args.batch_size for x in ['train', 'val']}
     num_cycle = {x: int(num_iter[x] * args.log_cycle) for x in ['train', 'val']}
-    logging.info(num_iter)
-    logging.info(num_cycle)
-    logging.info('training start')
-
+    logging.info(f'number of iter: {num_iter}')
+    logging.info(f'iter cycle for tensorboard: {num_cycle}')
+    logging.info('training start!')
+    training_start_time = time.time()
     # optimizer, utilizer
     if args.use_fp16:
         net, _ = amp.initialize(net, [], opt_level="O2")
+        
     best_acc = 0
     for epoch in range(1, args.num_epoch+1):
         epoch_start_time = time.time()
@@ -138,14 +143,18 @@ def main():
                         loss.backward()
                         optimizer.step()
                         scheduler.step()
+
                 # loss is already divided by the batch size
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
                 if i % num_cycle[phase] == num_cycle[phase]-1:
                     idx = (epoch-1) * num_iter[phase] + i
-                    writer.add_scalar(f'{phase}/loss', running_loss/((i+1)*args.batch_size), idx)
-                    writer.add_scalar(f'{phase}/accuracy', running_corrects/((i+1)*args.batch_size), idx)
-                    logging.info(f'{running_corrects/((i+1)*args.batch_size)}, {i}, {idx}')
+                    loss_iters = running_loss/((i+1)*args.batch_size)
+                    acc_iters = running_corrects/((i+1)*args.batch_size)
+                    writer.add_scalar(f'{phase}/loss', loss_iters, idx)
+                    writer.add_scalar(f'{phase}/accuracy', acc_iters, idx)
+                    logging.info(f'acc: {acc_iters}, loss: {loss_iters}, ({i}/{idx})')
+
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
@@ -168,6 +177,8 @@ def main():
 
         epoch_duration = time.time() - epoch_start_time
         logging.info(f'Epoch time: {int(epoch_duration)}s')
+    logging.info(f'End of training, whole session took {int(time.time() - training_start_time)}s')
+    logging.info(f'Best validation accuracy: {best_acc}')
 
 if __name__ == '__main__':
     main()
