@@ -10,8 +10,6 @@ def create_exp_dir(path):
 	if not os.path.exists(path):
 		os.makedirs(path)
 		print(f'Make dir: {path}')
-	else:
-		print(f'Use dir: {path}')
 
 def save_checkpoint(state, is_best, save_root):
 	save_path = os.path.join(save_root, 'checkpoint.pth.tar')

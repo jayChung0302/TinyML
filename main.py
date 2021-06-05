@@ -1,4 +1,3 @@
-from TinyML.utils import accuracy
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
@@ -19,7 +18,7 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 
 # from apex import amp
-from utils import create_exp_dir, save_checkpoint
+from utils import accuracy, save_checkpoint, create_exp_dir
 
 parser = argparse.ArgumentParser(description='Regular training')
 parser.add_argument('--data_dir', type=str, help='Dataset directory', default='/dataset')
@@ -30,11 +29,11 @@ parser.add_argument('--num_epoch', type=int, default=200, help='number of total 
 parser.add_argument('--batch_size', type=int, default=128, help='The size of batch')
 parser.add_argument('--lr', type=float, default=0.1, help='initial learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
-parser.add_argument('--weight_decay', type=float, default=1e-4, help='weight decay')
+parser.add_argument('--weight_decay', type=float, default=1e-3, help='weight decay')
 parser.add_argument('--num_classes', type=int, default=10, help='number of classes')
 parser.add_argument('--cuda', type=int, default=1)
 parser.add_argument('--use_fp16', action='store_true', help='using FP16')
-
+parser.add_argument('--log_cycle', type=float, default=0.1, help='tensorboard logging frequency')
 # continue training
 parser.add_argument('--is_continue', action='store_true', help='continue training')
 parser.add_argument('--load_path', type=str, default=None, help='path for loading checkpoint')
@@ -60,14 +59,16 @@ def main():
     logging.info(f'Experiment date: {datetime.today().strftime("%Y-%m-%d-%H-%M")}')
     logging.info(vars(args))
     writer = SummaryWriter(f'logs/{args.exp_name}')
-    net = models.squeezenet1_1(pretrained=True)
-    head = nn.Linear(in_features=512, out_features=args.num_classes)
-    net.classifier[1] = head
-
     if args.cuda:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device("cpu")
+    net = models.mobilenet_v3_small(pretrained=True)
+    head = nn.Linear(in_features=1024, out_features=args.num_classes)
+    net.classifier[3] = head
+    net = net.to(device)
+
+
 
     criterion = nn.CrossEntropyLoss().to(device)
 
@@ -92,27 +93,33 @@ def main():
 		])
 
     data_transforms = {'train': train_transform, 'val': val_transform}
-    image_datasets = {x: datasets.ImageFolder(os.path.join(args.data_dir, x), data_transforms[x]) \
-        for x in ['train', 'val']}
+    # image_datasets = {x: datasets.ImageFolder(os.path.join(args.data_dir, x), data_transforms[x]) \
+    #     for x in ['train', 'val']}
+    image_datasets = {}
+    image_datasets['train'] = datasets.CIFAR10(root='./dataset', train=True, download=True, transform=data_transforms['train'])
+    image_datasets['val'] = datasets.CIFAR10(root='./dataset', train=False, download=True, transform=data_transforms['val'])
+
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, shuffle=True, num_workers=4) \
         for x in ['train', 'val']}
     dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
     class_names = image_datasets['train'].classes
-
+    num_iter = {x: dataset_sizes[x]//args.batch_size for x in ['train', 'val']}
+    num_cycle = {x: int(num_iter[x] * args.log_cycle) for x in ['train', 'val']}
+    logging.info(num_iter)
+    logging.info(num_cycle)
+    logging.info('training start')
 
     # optimizer, utilizer
     if args.use_fp16:
         net, _ = amp.initialize(net, [], opt_level="O2")
     best_acc = 0
     for epoch in range(1, args.num_epoch+1):
-        logging.info('training session start')
         epoch_start_time = time.time()
-        for phase in ['train', 'valid']:
+        for phase in ['train', 'val']:
             running_loss = 0.0
             running_corrects = 0
 
             if phase == 'train':
-                scheduler.step()
                 net.train()
             else:
                 net.eval()
@@ -130,19 +137,19 @@ def main():
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
-
+                        scheduler.step()
                 # loss is already divided by the batch size
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
-                if i % 1000 == 999:
-                    idx = epoch * dataset_sizes[phase] + i
-                    writer.add_scalar(phase, running_loss/i, idx)
-                    writer.add_scalar(phase, running_corrects/i, idx)
+                if i % num_cycle[phase] == num_cycle[phase]-1:
+                    idx = (epoch-1) * num_iter[phase] + i
+                    writer.add_scalar(f'{phase}/loss', running_loss/((i+1)*args.batch_size), idx)
+                    writer.add_scalar(f'{phase}/accuracy', running_corrects/((i+1)*args.batch_size), idx)
+                    logging.info(f'{running_corrects/((i+1)*args.batch_size)}, {i}, {idx}')
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
-
-            logging(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+            logging.info(f'EPOCH:({epoch}/{args.num_epoch}) {phase} mode || Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
 
             is_best = False
             if phase == 'val' and epoch_acc > best_acc:
