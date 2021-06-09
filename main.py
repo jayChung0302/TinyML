@@ -18,6 +18,7 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 
 from utils import accuracy, save_checkpoint, create_exp_dir
+from RandAugment import RandAugment
 
 parser = argparse.ArgumentParser(description='Regular training')
 parser.add_argument('--data_dir', type=str, help='Dataset directory', default='/dataset')
@@ -32,6 +33,8 @@ parser.add_argument('--weight_decay', type=float, default=1e-3, help='weight dec
 parser.add_argument('--num_classes', type=int, default=10, help='number of classes')
 parser.add_argument('--cuda', type=int, default=1)
 parser.add_argument('--use_amp', action='store_true', help='using FP16')
+parser.add_argument('--use_lars', action='store_true', help='using layer-wise adaptive rate scaling')
+
 parser.add_argument('--log_cycle', type=float, default=0.1, help='tensorboard logging frequency')
 # continue training
 parser.add_argument('--is_continue', action='store_true', help='continue training')
@@ -39,16 +42,16 @@ parser.add_argument('--load_path', type=str, default=None, help='path for loadin
 
 #TODO:
 # Continuing
-# finetuning
 # TinyTL
 # Config
 # progressive learning
 # regularization turn off
-# torchlars
 
 args, _ = parser.parse_known_args()
 if args.use_amp:
     from apex import amp
+if args.use_lars:
+    from torchlars import LARS
 
 args.exp_path = os.path.join(args.save_path, args.exp_name)
 create_exp_dir(args.exp_path)
@@ -79,6 +82,8 @@ def main():
 
     optimizer = torch.optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum, \
         weight_decay=args.weight_decay)
+    if args.use_lars:
+        optimizer = LARS(optimizer)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0)
     
     mean = (0.4914, 0.4822, 0.4465)
@@ -96,7 +101,8 @@ def main():
 			transforms.ToTensor(),
 			transforms.Normalize(mean=mean,std=std)
 		])
-    
+        
+    train_transform.transforms.insert(0, RandAugment(N, M))
     data_transforms = {'train': train_transform, 'val': val_transform}
     logging.info(f'{net.__class__.__name__}')
     logging.info(f'{data_transforms}')
