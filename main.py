@@ -5,6 +5,7 @@ import os, sys
 import argparse
 import logging
 import time
+from torchvision.transforms.transforms import RandomResizedCrop, RandomRotation, Resize
 from tqdm import tqdm
 from datetime import datetime
 
@@ -19,6 +20,7 @@ import torchvision.models as models
 
 from utils import accuracy, save_checkpoint, create_exp_dir
 from RandAugment import RandAugment
+from model.pyramidnet import PyramidNet
 
 parser = argparse.ArgumentParser(description='Regular training')
 parser.add_argument('--data_dir', type=str, help='Dataset directory', default='/dataset')
@@ -30,7 +32,7 @@ parser.add_argument('--batch_size', type=int, default=128, help='The size of bat
 parser.add_argument('--lr', type=float, default=0.1, help='initial learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=1e-3, help='weight decay')
-parser.add_argument('--num_classes', type=int, default=10, help='number of classes')
+parser.add_argument('--num_classes', type=int, default=100, help='number of classes')
 parser.add_argument('--cuda', type=int, default=1)
 parser.add_argument('--use_amp', action='store_true', help='using FP16')
 parser.add_argument('--use_lars', action='store_true', help='using layer-wise adaptive rate scaling')
@@ -73,9 +75,12 @@ def main():
         device = torch.device("cpu")
         pin_memory = False
 
-    net = models.mobilenet_v2(pretrained=True)
-    head = nn.Linear(in_features=1280, out_features=args.num_classes)
-    net.classifier[1] = head
+    head = nn.Linear(in_features=1696, out_features=args.num_classes)
+    net = PyramidNet(dataset='imagenet', depth=101, alpha=360, num_classes=1000)
+    wts = torch.load('./model/pyramidnet101_360.pth')
+    net.load_state_dict(wts)
+    net.fc = head
+    logging.info(f'network: {net}')
     net = net.to(device)
 
     criterion = nn.CrossEntropyLoss().to(device)
@@ -86,23 +91,26 @@ def main():
         optimizer = LARS(optimizer)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0)
     
-    mean = (0.4914, 0.4822, 0.4465)
-    std = (0.2470, 0.2435, 0.2616)
+    # mean = (0.4914, 0.4822, 0.4465)
+    # std = (0.2470, 0.2435, 0.2616)
+    mean = (0.5071, 0.4865, 0.4409)
+    std = (0.2673, 0.2564, 0.2762)
 
     train_transform = transforms.Compose([
-			transforms.Pad(4, padding_mode='reflect'),
-			transforms.RandomCrop(32),
+			# transforms.Pad(4, padding_mode='reflect'),
+            transforms.RandomResizedCrop(224),
 			transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(30),
 			transforms.ToTensor(),
 			transforms.Normalize(mean=mean,std=std)
 		])
     val_transform = transforms.Compose([
-			transforms.CenterCrop(32),
+			transforms.Resize(224),
 			transforms.ToTensor(),
 			transforms.Normalize(mean=mean,std=std)
 		])
-        
-    train_transform.transforms.insert(0, RandAugment(N, M))
+    # N, M=3, 13
+    # train_transform.transforms.insert(0, RandAugment(N, M))
     data_transforms = {'train': train_transform, 'val': val_transform}
     logging.info(f'{net.__class__.__name__}')
     logging.info(f'{data_transforms}')
@@ -112,8 +120,8 @@ def main():
     # image_datasets = {x: datasets.ImageFolder(os.path.join(args.data_dir, x), data_transforms[x]) \
     #     for x in ['train', 'val']}
     image_datasets = {}
-    image_datasets['train'] = datasets.CIFAR10(root='./dataset', train=True, download=True, transform=data_transforms['train'])
-    image_datasets['val'] = datasets.CIFAR10(root='./dataset', train=False, download=True, transform=data_transforms['val'])
+    image_datasets['train'] = datasets.CIFAR100(root='./dataset', train=True, download=True, transform=data_transforms['train'])
+    image_datasets['val'] = datasets.CIFAR100(root='./dataset', train=False, download=True, transform=data_transforms['val'])
 
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, \
         shuffle=True, num_workers=4, pin_memory=pin_memory) \
@@ -178,7 +186,7 @@ def main():
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
-            logging.info(f'EPOCH:({epoch}/{args.num_epoch}) {phase} mode || Acc: {epoch_acc:.4f}, Loss: {epoch_loss:.4f}')
+            logging.info(f'EPOCH:({epoch}/{args.num_epoch}) {phase} mode || Acc: {epoch_acc:.4f}, Loss: {epoch_loss:.4f} || current best Acc: {best_acc:.4f}')
 
             if phase == 'val':
                 is_best = False
