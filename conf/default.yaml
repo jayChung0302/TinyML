@@ -1,0 +1,5 @@
+batch_size: 64
+log_cycle:
+num_epoch:
+use_amp: True
+use_lars: True
