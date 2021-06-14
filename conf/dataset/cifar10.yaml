@@ -1,2 +1,4 @@
-cifar10:
-    hello: kk
+name: cifar10
+num_classes: 10
+mean: [0.4914, 0.4822, 0.4465]
+var: [0.2470, 0.2435, 0.2616]

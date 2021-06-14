@@ -1,0 +1,6 @@
+name: randaugment
+n: 3
+m: 13
+augment_list: [
+  
+]

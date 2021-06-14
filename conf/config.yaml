@@ -3,9 +3,19 @@ defaults:
   - optimizer: sgd
   - scheduler: cosine_anneal
   - model: resnet
+  - augment: randaugment
 params:
-  batchsize: 64
+  num_epoch: 100
+  batch_size: 64
+  lr: 0.01
+exp:
+  data_dir: /dataset
+  exp_name: dryrun
+  checkpoint_path: checkpoint
+  save_path: exp
   log_cycle: 0.1
-  num_epoch: 30
+  is_continue: False
+  load_path:
+  use_cuda: True
   use_amp: True
-  use_lars: True
+  use_lars: False

@@ -1,3 +1,2 @@
-mobilenetv3:
-  version: mobilenetv3_large
-  
+name: mobilenet
+version: mobilenetv3_large

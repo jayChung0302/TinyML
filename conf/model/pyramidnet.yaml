@@ -1,5 +1,5 @@
-pyramidnet:
-  dataset: imagenet
-  depth: 101
-  alpha: 360
-  num_classes: 1000
+name: pyramidnet:
+dataset: imagenet
+depth: 101
+alpha: 360
+num_classes: 1000

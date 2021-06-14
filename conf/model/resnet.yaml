@@ -1,2 +1,2 @@
-resnet:
-  version: resnet50
+name: resnet
+version: resnet50
