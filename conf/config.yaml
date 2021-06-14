@@ -1,0 +1,11 @@
+defaults:
+  - dataset: cifar10
+  - optimizer: sgd
+  - scheduler: cosine_anneal
+  - model: resnet
+params:
+  batchsize: 64
+  log_cycle: 0.1
+  num_epoch: 30
+  use_amp: True
+  use_lars: True

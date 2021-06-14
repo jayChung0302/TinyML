@@ -1,0 +1,3 @@
+cosine_anneal:
+    T_max: 10
+    eta_min: 0 
