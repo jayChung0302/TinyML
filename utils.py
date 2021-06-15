@@ -18,6 +18,13 @@ def save_checkpoint(state, is_best, save_root):
 		best_save_path = os.path.join(save_root, 'model_best.pth.tar')
 		shutil.copyfile(save_path, best_save_path)
 
+def load_checkpoint(load_root, is_best=False, filename='checkpoint.pth.tar'):
+	if is_best:
+		filename = 'model_best.pth.tar'
+	load_path = os.path.join(load_root, filename)
+	state = torch.load(load_path)
+	return state
+
 def accuracy(output, target, topk=(1,)):
 	"""Computes the precision@k for the specified values of k"""
 	maxk = max(topk)
