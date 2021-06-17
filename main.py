@@ -48,7 +48,7 @@ def main(cfg:DictConfig) -> None:
     
     writer = SummaryWriter(f'logs/{cfg.exp.exp_name}')
     #TODO: get model
-    # net = get_model(cfg.model, cfg.dataset)
+    # net = get_model(cfg)
     head = nn.Linear(in_features=1696, out_features=cfg.dataset.num_classes)
     net = PyramidNet(dataset='imagenet', depth=101, alpha=360, num_classes=1000)
     wts = torch.load('./model/pyramidnet101_360.pth')
