@@ -2,12 +2,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 import os, sys
-import argparse
 import logging
 import time
-from torchvision.transforms.transforms import RandomResizedCrop, RandomRotation, Resize
-from datetime import datetime
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -18,9 +14,8 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 
 from utils import save_checkpoint
-from RandAugment import RandAugment
 
-def trainer(net, image_datasets, cfg, loss_fn, optimizer, scheduler, device, pin_memory, exp_path, writer):
+def trainer(net, image_datasets, cfg, loss_fn, optimizer, scheduler, device, pin_memory, exp_path, writer, extra=False):
     if cfg.exp.use_amp:
         from apex import amp
     dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
@@ -35,7 +30,8 @@ def trainer(net, image_datasets, cfg, loss_fn, optimizer, scheduler, device, pin
         shuffle=True, num_workers=4, pin_memory=pin_memory) \
         for x in ['train', 'val']}
     best_acc = 0
-    for epoch in range(1, cfg.params.num_epoch+1):
+    num_epoch = cfg.params.num_epoch if not extra else cfg.exp.extra_epoch
+    for epoch in range(1, num_epoch+1):
         epoch_start_time = time.time()
         for phase in ['train', 'val']:
             running_loss = 0.0
@@ -81,7 +77,7 @@ def trainer(net, image_datasets, cfg, loss_fn, optimizer, scheduler, device, pin
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
-            logging.info(f'EPOCH:({epoch}/{cfg.params.num_epochnum_epoch}) {phase} mode || Acc: {epoch_acc:.4f}, Loss: {epoch_loss:.4f} || current best Acc: {best_acc:.4f}')
+            logging.info(f'EPOCH:({epoch}/{num_epoch}) {phase} mode || Acc: {epoch_acc:.4f}, Loss: {epoch_loss:.4f} || current best Acc: {best_acc:.4f}')
 
             if phase == 'val':
                 is_best = False
@@ -102,8 +98,8 @@ def trainer(net, image_datasets, cfg, loss_fn, optimizer, scheduler, device, pin
                 save_checkpoint(stats, is_best, exp_path)
 
         epoch_duration = time.time() - epoch_start_time
-        logging.info(f'epoch duration: {int(epoch_duration)}s')
-    logging.info(f'End of training, whole session took {int(time.time() - training_start_time)}s')
+        logging.info(f'epoch duration: {int(epoch_duration//60)}m {int(epoch_duration)%60:.2f}s')
+    logging.info(f'End of training, whole session took {int((time.time() - training_start_time)//3600)}h, {int((time.time() - training_start_time)//60)}m')
     logging.info(f'Best validation accuracy: {best_acc}')
     
     return net, optimizer, scheduler
