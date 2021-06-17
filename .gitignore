@@ -1,0 +1,13 @@
+# ignore all .pyc files
+*.pyc
+
+# ignore all json files whose name begin with 'temp-'
+temp-*.json
+
+# specify a folder with slash in the end
+# ignore all files in any directory named temp
+temp/
+
+# ignore all .pdf files in the doc/ directory and any of its subdirectories
+# /** matches 0 or more directories
+doc/**/*.pdf
