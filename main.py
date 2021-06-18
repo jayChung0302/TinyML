@@ -20,6 +20,7 @@ from utils import accuracy, save_checkpoint, create_exp_dir, load_checkpoint
 from RandAugment import RandAugment
 from model.pyramidnet import PyramidNet
 from train import trainer
+from model_factory import get_model
 
 #TODO:
 # Continuing - get model with config
@@ -48,7 +49,9 @@ def main(cfg:DictConfig) -> None:
     
     writer = SummaryWriter(f'logs/{cfg.exp.exp_name}')
     #TODO: get model
-    # net = get_model(cfg)
+    net = get_model(cfg)
+    print(net)
+    sys.exit()
     head = nn.Linear(in_features=1696, out_features=cfg.dataset.num_classes)
     net = PyramidNet(dataset='imagenet', depth=101, alpha=360, num_classes=1000)
     wts = torch.load('./model/pyramidnet101_360.pth')

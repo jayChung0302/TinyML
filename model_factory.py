@@ -14,9 +14,12 @@ AVAILABLE=[
 ]
 lib_keys = models.__dict__.keys()
 
-def get_config():
-    print(locals())
-    pass
+def config_detail(net, modelcfg):
+    if modelcfg.name == 'pyramidnet':
+        return net(dataset=modelcfg.dataset, depth=modelcfg.depth, alpha=modelcfg.alpha, \
+            num_classes=modelcfg.num_classes)
+    if modelcfg.name == 'SEResNext':
+        pass
 
 def get_model(cfg: Dict) -> nn.Module:
     modelcfg, datacfg = cfg.model, cfg.dataset
@@ -30,21 +33,24 @@ def get_model(cfg: Dict) -> nn.Module:
         raise NotImplementedError(f'{modelcfg.name} is not implemented')
 
     net = getattr(module, modelcfg.version)
+
     if cfg.exp.is_continue:
         if using_lib:
             net = net(pretrained=True)
         else:
+            net = config_detail(net, modelcfg)
             stats = load_checkpoint(cfg.exp.load_path, True)
-            net = net()
             net.load_state_dict(stats['net_state_dict'])
             
     else:
-        net = net()
-
+        net = config_detail(net, modelcfg)
+        
     if datacfg.num_classes != 1000:
         #TODO: Add changing head feature
         # head = datacfg.dataset.num_classes
         pass
+
+    return net
 
 
     
