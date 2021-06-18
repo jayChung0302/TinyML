@@ -48,12 +48,9 @@ def main(cfg:DictConfig) -> None:
     log.info(f'Experiment date: {datetime.today().strftime("%Y-%m-%d-%H-%M")}')
     
     writer = SummaryWriter(f'logs/{cfg.exp.exp_name}')
-    #TODO: get model
+
     net = get_model(cfg)
-    print(net)
-    sys.exit()
     head = nn.Linear(in_features=1696, out_features=cfg.dataset.num_classes)
-    net = PyramidNet(dataset='imagenet', depth=101, alpha=360, num_classes=1000)
     wts = torch.load('./model/pyramidnet101_360.pth')
     net.load_state_dict(wts)
     net.fc = head
