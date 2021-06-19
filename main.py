@@ -21,10 +21,10 @@ from RandAugment import RandAugment
 from model.pyramidnet import PyramidNet
 from train import trainer
 from model_factory import get_model
+from tinytl import *
 
 #TODO:
 # Continuing - get model with config
-# TinyTL
 # progressive learning
 
 log = logging.getLogger(__name__)
@@ -50,11 +50,14 @@ def main(cfg:DictConfig) -> None:
     writer = SummaryWriter(f'logs/{cfg.exp.exp_name}')
 
     net = get_model(cfg)
+
     head = nn.Linear(in_features=1696, out_features=cfg.dataset.num_classes)
     wts = torch.load('./model/pyramidnet101_360.pth')
     net.load_state_dict(wts)
     net.fc = head
     log.info(f'network: {net}')
+    if cfg.exp.tiny_tl:
+        tinytlb(net)
     net = net.to(device)
     loss_fn = nn.CrossEntropyLoss().to(device)
     #TODO: get optimizer
