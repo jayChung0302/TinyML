@@ -1,4 +1,15 @@
-name: cifar10
+name: CIFAR10
 num_classes: 10
 mean: [0.4914, 0.4822, 0.4465]
-var: [0.2470, 0.2435, 0.2616]
+std: [0.2470, 0.2435, 0.2616]
+train_transform: [
+  [RandomResizedCrop, 224],
+  RandomHorizontalFlip,
+  [RandomRotation, 30],
+  ToTensor,
+  Normalize]
+val_transform: [
+  [Resize, 224],
+  ToTensor,
+  Normalize
+]

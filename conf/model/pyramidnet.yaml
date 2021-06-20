@@ -1,4 +1,5 @@
-name: pyramidnet:
+name: pyramidnet
+version: PyramidNet
 dataset: imagenet
 depth: 101
 alpha: 360

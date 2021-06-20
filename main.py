@@ -21,6 +21,7 @@ from RandAugment import RandAugment
 from model.pyramidnet import PyramidNet
 from train import trainer
 from model_factory import get_model
+from custom_dataset import get_dataset
 from tinytl import *
 
 #TODO:
@@ -31,6 +32,7 @@ log = logging.getLogger(__name__)
 
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg:DictConfig) -> None:
+    get_dataset(cfg.dataset)
     exp_path = os.path.join(cfg.exp.save_path, cfg.exp.exp_name)
     create_exp_dir(exp_path)
     if cfg.exp.use_amp:
@@ -69,39 +71,19 @@ def main(cfg:DictConfig) -> None:
     #TODO: get scheduler
     # scheduler = get_scheduler(cfg.scheduler, optimizer)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0)
-    #TODO: get transform
-    mean = (0.5071, 0.4865, 0.4409)
-    std = (0.2673, 0.2564, 0.2762)
-
-    train_transform = transforms.Compose([
-            transforms.RandomResizedCrop(224),
-			transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(30),
-			transforms.ToTensor(),
-			transforms.Normalize(mean=mean,std=std)
-		])
-    val_transform = transforms.Compose([
-			transforms.Resize(224),
-			transforms.ToTensor(),
-			transforms.Normalize(mean=mean,std=std)
-		])
+    
     #TODO: RandAugment config
     # N, M=3, 13
     # train_transform.transforms.insert(0, RandAugment(N, M))
-    data_transforms = {'train': train_transform, 'val': val_transform}
+    
     log.info(f'{net.__class__.__name__}')
-    log.info(f'{data_transforms}')
+    log.info(f'train transform: {cfg.dataset.train_trasnform}')
+    log.info(f'val transform: {cfg.dataset.val_trasnform}')
     log.info(f'{optimizer}')
     log.info(f'{scheduler.__class__.__name__}: {scheduler.state_dict()}')
-
-    #TODO: get dataset
-    # image_datasets = {x: datasets.ImageFolder(os.path.join(args.data_dir, x), data_transforms[x]) \
-    #     for x in ['train', 'val']}
     
-    image_datasets = {}
-    image_datasets['train'] = datasets.CIFAR100(root='./dataset', train=True, download=True, transform=data_transforms['train'])
-    image_datasets['val'] = datasets.CIFAR100(root='./dataset', train=False, download=True, transform=data_transforms['val'])
-
+    image_datasets = get_dataset(datacfg=cfg.dataset)
+    
     if cfg.exp.use_amp:
         # amp initialization
         net, optimizer = amp.initialize(net, optimizer, opt_level="O1")
@@ -110,22 +92,12 @@ def main(cfg:DictConfig) -> None:
         device, pin_memory, exp_path, writer)
 
     if cfg.exp.reg_off:
-        # get_transform
-        # get_dataset
-        train_transform = transforms.Compose([
-            transforms.Resize(224),
-			transforms.ToTensor(),
-			transforms.Normalize(mean=mean,std=std)
-		])
-        val_transform = transforms.Compose([
-			transforms.Resize(224),
-			transforms.ToTensor(),
-			transforms.Normalize(mean=mean,std=std)
-		])
-        image_datasets['train'] = datasets.CIFAR100(root='./dataset', train=True, download=True, transform=data_transforms['train'])
-        image_datasets['val'] = datasets.CIFAR100(root='./dataset', train=False, download=True, transform=data_transforms['val'])
+        log.info(f'additional training with weaker or no regularization')
+        image_datasets = get_dataset(datacfg=cfg.dataset)
+        image_datasets['train'] = image_datasets['val']
         stats = load_checkpoint(exp_path, True)
         net.load_state_dict(stats['net_state_dict'])
+        #TODO: weaker weight decay
         optimizer.load_state_dict(stats['optimizer_state_dict'])
         scheduler.load_state_dict(stats['scheduler_state_dict'])
         trainer(net, image_datasets, cfg, loss_fn, optimizer, scheduler, \

@@ -16,8 +16,9 @@ exp:
   log_cycle: 0.1
   is_continue: False
   load_path:
-  use_cuda: True
-  use_amp: True
+  use_cuda: False
+  use_amp: False
   use_lars: False
-  reg_off: True
+  reg_off: False
   extra_epoch: 1
+  tiny_tl: False
