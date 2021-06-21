@@ -51,13 +51,8 @@ def get_model(cfg: Dict) -> nn.Module:
         pass
 
     return net
-
-
-    
-        
         
 if __name__ == '__main__':
-    get_config()
     getattr(model, 'pyramidnet')
     # get attribute
     net = getattr(models, 'resnet') # resnet

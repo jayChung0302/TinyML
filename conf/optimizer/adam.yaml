@@ -1,0 +1,5 @@
+name: adam
+weight_decay: 0
+beta: (0.9, 0.999)
+eps: 1e-08
+amsgrad: False

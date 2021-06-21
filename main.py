@@ -22,11 +22,11 @@ from model.pyramidnet import PyramidNet
 from train import trainer
 from model_factory import get_model
 from custom_dataset import get_dataset
+from custom_optimizer import get_optimizer
 from tinytl import *
 
 #TODO:
 # Continuing - get model with config
-# progressive learning
 
 log = logging.getLogger(__name__)
 
@@ -37,18 +37,13 @@ def main(cfg:DictConfig) -> None:
     create_exp_dir(exp_path)
     if cfg.exp.use_amp:
         from apex import amp
-    if cfg.exp.use_lars:
-        from torchlars import LARS
     if cfg.exp.use_cuda:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         pin_memory = True
     else:
         device = torch.device("cpu")
         pin_memory = False
-
     log.info(OmegaConf.to_yaml(cfg))
-    log.info(f'Experiment date: {datetime.today().strftime("%Y-%m-%d-%H-%M")}')
-    
     writer = SummaryWriter(f'logs/{cfg.exp.exp_name}')
 
     net = get_model(cfg)
@@ -62,12 +57,8 @@ def main(cfg:DictConfig) -> None:
         tinytlb(net)
     net = net.to(device)
     loss_fn = nn.CrossEntropyLoss().to(device)
-    #TODO: get optimizer
-    # optimizer = get_optimizer(cfg.optimizer, cfg.params.lr)
-    optimizer = torch.optim.SGD(net.parameters(), lr=cfg.params.lr, momentum=cfg.optmizer.momentum, \
-        weight_decay=cfg.optimizer.weight_decay)
-    if cfg.exp.use_lars:
-        optimizer = LARS(optimizer)
+    optimizer = get_optimizer(net, cfg)
+
     #TODO: get scheduler
     # scheduler = get_scheduler(cfg.scheduler, optimizer)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0)
