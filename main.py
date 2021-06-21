@@ -22,7 +22,7 @@ from model.pyramidnet import PyramidNet
 from train import trainer
 from model_factory import get_model
 from custom_dataset import get_dataset
-from custom_optimizer import get_optimizer
+from custom_optimizer import get_optimizer, get_scheduler
 from tinytl import *
 
 #TODO:
@@ -57,11 +57,8 @@ def main(cfg:DictConfig) -> None:
         tinytlb(net)
     net = net.to(device)
     loss_fn = nn.CrossEntropyLoss().to(device)
-    optimizer = get_optimizer(net, cfg)
-
-    #TODO: get scheduler
-    # scheduler = get_scheduler(cfg.scheduler, optimizer)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=0)
+    optimizer = get_optimizer(net, cfg.optimizer, cfg.params.lr, cfg.exp.use_lars)
+    scheduler = get_scheduler(cfg.scheduler, optimizer)
     
     #TODO: RandAugment config
     # N, M=3, 13
