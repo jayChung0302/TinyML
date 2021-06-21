@@ -16,4 +16,17 @@ def get_optimizer(net, cfg):
     if cfg.exp.use_lars:
         from torchlars import LARS
         optimizer = LARS(optimizer)
+
     return optimizer
+
+def get_scheduler(cfg, optimizer):
+    if cfg.scheduler.name == 'cosine_anneal':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.scheduler.T_max, \
+            eta_min=cfg.scheduler.eta_min)
+    
+    if cfg.scheduler.name == 'step_lr':
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, cfg.scheduler.step_size, \
+            gamma=cfg.scheduler.gamma, last_epoch=cfg.scheduler.last_epoch, verbose=cfg.scheduler.verbose)
+
+    return scheduler
+
