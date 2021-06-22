@@ -8,6 +8,154 @@ import math
 from inspect import isfunction
 
 
+class MyModule(nn.Module):
+    def forward(self, x):
+        raise NotImplementedError
+
+    @property
+    def module_str(self):
+        raise NotImplementedError
+
+    @property
+    def config(self):
+        raise NotImplementedError
+
+    @staticmethod
+    def build_from_config(config):
+        raise NotImplementedError
+
+class LiteResidualModule(MyModule):
+	def __init__(self, main_branch, in_channels, out_channels,
+	             expand=1.0, kernel_size=3, act_func='relu', n_groups=2,
+	             downsample_ratio=2, upsample_type='bilinear', stride=1):
+		super(LiteResidualModule, self).__init__()
+
+		self.main_branch = main_branch
+
+		self.lite_residual_config = {
+			'in_channels': in_channels,
+			'out_channels': out_channels,
+			'expand': expand,
+			'kernel_size': kernel_size,
+			'act_func': act_func,
+			'n_groups': n_groups,
+			'downsample_ratio': downsample_ratio,
+			'upsample_type': upsample_type,
+			'stride': stride,
+		}
+
+		kernel_size = 1 if downsample_ratio is None else kernel_size
+
+		padding = get_same_padding(kernel_size)
+		if downsample_ratio is None:
+			pooling = MyGlobalAvgPool2d()
+		else:
+			pooling = nn.AvgPool2d(downsample_ratio, downsample_ratio, 0)
+		num_mid = make_divisible(int(in_channels * expand), divisor=MyNetwork.CHANNEL_DIVISIBLE)
+		self.lite_residual = nn.Sequential(OrderedDict({
+			'pooling': pooling,
+			'conv1': nn.Conv2d(in_channels, num_mid, kernel_size, stride, padding, groups=n_groups, bias=False),
+			'bn1': nn.BatchNorm2d(num_mid),
+			'act': build_activation(act_func),
+			'conv2': nn.Conv2d(num_mid, out_channels, 1, 1, 0, bias=False),
+			'final_bn': nn.BatchNorm2d(out_channels),
+		}))
+
+		# initialize
+		init_models(self.lite_residual)
+		self.lite_residual.final_bn.weight.data.zero_()
+
+	def forward(self, x):
+		main_x = self.main_branch(x)
+		lite_residual_x = self.lite_residual(x)
+		if self.lite_residual_config['downsample_ratio'] is not None:
+			lite_residual_x = F.upsample(lite_residual_x, main_x.shape[2:],
+			                             mode=self.lite_residual_config['upsample_type'])
+		return main_x + lite_residual_x
+
+	@property
+	def module_str(self):
+		return self.main_branch.module_str + ' + LiteResidual(downsample=%s, n_groups=%s, expand=%s, ks=%s)' % (
+			self.lite_residual_config['downsample_ratio'], self.lite_residual_config['n_groups'],
+			self.lite_residual_config['expand'], self.lite_residual_config['kernel_size'],
+		)
+
+	@property
+	def config(self):
+		return {
+			'name': LiteResidualModule.__name__,
+			'main': self.main_branch.config,
+			'lite_residual': self.lite_residual_config,
+		}
+
+	@staticmethod
+	def build_from_config(config):
+		main_branch = my_set_layer_from_config(config['main'])
+		lite_residual_module = LiteResidualModule(
+			main_branch, **config['lite_residual']
+		)
+		return lite_residual_module
+
+	def __repr__(self):
+		return '{\n (main branch): ' + self.main_branch.__repr__() + ', ' + \
+		       '\n (lite residual): ' + self.lite_residual.__repr__() + '}'
+
+	@staticmethod
+	def insert_lite_residual(net, downsample_ratio=2, upsample_type='bilinear',
+	                         expand=1.0, max_kernel_size=5, act_func='relu', n_groups=2,
+	                         **kwargs):
+		if LiteResidualModule.has_lite_residual_module(net):
+			# skip if already has lite residual modules
+			return
+		from ofa.imagenet_classification.networks import ProxylessNASNets
+		if isinstance(net, ProxylessNASNets):
+			bn_param = net.get_bn_param()
+
+			# blocks
+			max_resolution = 128
+			stride_stages = [2, 2, 2, 1, 2, 1]
+			for block_index_list, stride in zip(net.grouped_block_index, stride_stages):
+				for i, idx in enumerate(block_index_list):
+					block = net.blocks[idx].conv
+					if isinstance(block, ZeroLayer):
+						continue
+					s = stride if i == 0 else 1
+					block_downsample_ratio = downsample_ratio
+					block_resolution = max(1, max_resolution // block_downsample_ratio)
+					max_resolution //= s
+
+					kernel_size = max_kernel_size
+					if block_resolution == 1:
+						kernel_size = 1
+						block_downsample_ratio = None
+					else:
+						while block_resolution < kernel_size:
+							kernel_size -= 2
+					net.blocks[idx].conv = LiteResidualModule(
+						block, block.in_channels, block.out_channels, expand=expand, kernel_size=kernel_size,
+						act_func=act_func, n_groups=n_groups, downsample_ratio=block_downsample_ratio,
+						upsample_type=upsample_type, stride=s,
+					)
+
+			net.set_bn_param(**bn_param)
+		else:
+			raise NotImplementedError
+
+	@staticmethod
+	def has_lite_residual_module(net):
+		for m in net.modules():
+			if isinstance(m, LiteResidualModule):
+				return True
+		return False
+
+	@property
+	def in_channels(self):
+		return self.lite_residual_config['in_channels']
+
+	@property
+	def out_channels(self):
+		return self.lite_residual_config['out_channels']
+
 class ConvBlock(nn.Module):
     """
     Standard convolution block with Batch normalization and activation.
@@ -275,3 +423,33 @@ class Identity(nn.Module):
     def __repr__(self):
         return '{name}()'.format(name=self.__class__.__name__)
 
+def init_models(net, model_init='he_fout'):
+    """
+        Conv2d,
+        BatchNorm2d, BatchNorm1d, GroupNorm
+        Linear,
+    """
+    if isinstance(net, list):
+        for sub_net in net:
+            init_models(sub_net, model_init)
+        return
+    for m in net.modules():
+        if isinstance(m, nn.Conv2d):
+            if model_init == 'he_fout':
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif model_init == 'he_fin':
+                n = m.kernel_size[0] * m.kernel_size[1] * m.in_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            else:
+                raise NotImplementedError
+            if m.bias is not None:
+                m.bias.data.zero_()
+        elif type(m) in [nn.BatchNorm2d, nn.BatchNorm1d, nn.GroupNorm]:
+            m.weight.data.fill_(1)
+            m.bias.data.zero_()
+        elif isinstance(m, nn.Linear):
+            stdv = 1. / math.sqrt(m.weight.size(1))
+            m.weight.data.uniform_(-stdv, stdv)
+            if m.bias is not None:
+                m.bias.data.zero_()
