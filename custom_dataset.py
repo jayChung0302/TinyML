@@ -2,6 +2,7 @@ import os, sys
 import omegaconf
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+from RandAugment import RandAugment
 
 def get_dataset(datacfg):
     image_datasets = {}
@@ -36,9 +37,10 @@ def get_transform(datacfg):
                         transform_ls.append(getattr(transforms, transform)(param))
                     else:
                         transform_ls.append(getattr(transforms, transform)())
-        #TODO: RandAugment config
-        # N, M=3, 13
-        # train_transform.transforms.insert(0, RandAugment(N, M))
+        
         data_transforms[mode] = transforms.Compose(transform_ls)
+        if mode == 'train_transform':
+            N, M = datacfg.randaugment.N, datacfg.randaugment.M
+            data_transforms[mode].transforms.insert(0, RandAugment(N, M))        
 
     return data_transforms

@@ -32,7 +32,6 @@ log = logging.getLogger(__name__)
 
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg:DictConfig) -> None:
-    get_dataset(cfg.dataset)
     exp_path = os.path.join(cfg.exp.save_path, cfg.exp.exp_name)
     create_exp_dir(exp_path)
     if cfg.exp.use_amp:
@@ -59,10 +58,6 @@ def main(cfg:DictConfig) -> None:
     loss_fn = nn.CrossEntropyLoss().to(device)
     optimizer = get_optimizer(net, cfg.optimizer, cfg.params.lr, cfg.exp.use_lars)
     scheduler = get_scheduler(cfg.scheduler, optimizer)
-    
-    #TODO: RandAugment config
-    # N, M=3, 13
-    # train_transform.transforms.insert(0, RandAugment(N, M))
     
     log.info(f'{net.__class__.__name__}')
     log.info(f'train transform: {cfg.dataset.train_trasnform}')
