@@ -18,8 +18,10 @@ def config_detail(net, modelcfg):
     if modelcfg.name == 'pyramidnet':
         return net(dataset=modelcfg.dataset, depth=modelcfg.depth, alpha=modelcfg.alpha, \
             num_classes=modelcfg.num_classes)
-    if modelcfg.name == 'SEResNext':
+    elif modelcfg.name == 'SEResNext':
         pass
+    else:
+        return net()
 
 def get_model(cfg: Dict) -> nn.Module:
     modelcfg, datacfg = cfg.model, cfg.dataset
@@ -46,16 +48,34 @@ def get_model(cfg: Dict) -> nn.Module:
         net = config_detail(net, modelcfg)
         
     if datacfg.num_classes != 1000:
-        #TODO: Add changing head feature
-        # head = datacfg.dataset.num_classes
-        pass
+        switch_head(net, datacfg.num_classes)
 
     return net
+
+def switch_head(net, num_classes):
+    head_name, head = list(net.named_children())[-1]
+    if isinstance(head, nn.Sequential):
+        head_name2, head2 = list(head.named_children())[-1]
+        last_conv = getattr(getattr(net, head_name), head_name2)
+        is_bias = True if last_conv.bias is not None else False
+        setattr(getattr(net, head_name), head_name2, nn.Linear(last_conv.in_features, num_classes, bias=is_bias))
+        return net
+    else:
+        last_conv = head
+        is_bias = True if last_conv.bias is not None else False
+        setattr(net, head_name, nn.Linear(last_conv.in_features, num_classes, bias=is_bias))
+        return net
         
 if __name__ == '__main__':
-    getattr(model, 'pyramidnet')
-    # get attribute
-    net = getattr(models, 'resnet') # resnet
-    getattr(net, 'resnet18')() # net
-    getattr(models, 'resnet')
+    net1 = models.resnet50()
+    net2 = models.vgg16()
+    head_name, head = list(net2.named_children())[-1]
     
+    import torch;
+    inp = torch.randn(1,3,224,224)
+    switch_head(net1, 10)
+    print(net1(inp))
+    import time; time.sleep(4)
+    inp = torch.randn(1,3,224,224)
+    switch_head(net2, 5)
+    print(net2(inp))

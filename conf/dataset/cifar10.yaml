@@ -13,3 +13,6 @@ val_transform: [
   ToTensor,
   Normalize
 ]
+randaug: 
+  N: 3
+  M: 9

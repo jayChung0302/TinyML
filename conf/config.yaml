@@ -2,7 +2,7 @@ defaults:
   - dataset: cifar10
   - optimizer: sgd
   - scheduler: cosine_anneal
-  - model: resnet
+  - model: pyramidnet
   - augment: randaugment
 params:
   num_epoch: 100
@@ -16,9 +16,9 @@ exp:
   log_cycle: 0.1
   is_continue: False
   load_path:
-  use_cuda: False
-  use_amp: False
+  use_cuda: True
+  use_amp: True
   use_lars: False
-  reg_off: False
+  reg_off: True
   extra_epoch: 1
   tiny_tl: False

@@ -60,8 +60,8 @@ def main(cfg:DictConfig) -> None:
     scheduler = get_scheduler(cfg.scheduler, optimizer)
     
     log.info(f'{net.__class__.__name__}')
-    log.info(f'train transform: {cfg.dataset.train_trasnform}')
-    log.info(f'val transform: {cfg.dataset.val_trasnform}')
+    log.info(f'train transform: {cfg.dataset.train_transform}')
+    log.info(f'val transform: {cfg.dataset.val_transform}')
     log.info(f'{optimizer}')
     log.info(f'{scheduler.__class__.__name__}: {scheduler.state_dict()}')
     
