@@ -26,7 +26,7 @@ from custom_optimizer import get_optimizer, get_scheduler
 from tinytl import *
 
 #TODO:
-# Continuing - get model with config
+# Continuing
 
 log = logging.getLogger(__name__)
 
@@ -47,10 +47,10 @@ def main(cfg:DictConfig) -> None:
 
     net = get_model(cfg)
 
-    head = nn.Linear(in_features=1696, out_features=cfg.dataset.num_classes)
-    wts = torch.load('./model/pyramidnet101_360.pth')
-    net.load_state_dict(wts)
-    net.fc = head
+    # head = nn.Linear(in_features=1696, out_features=cfg.dataset.num_classes)
+    # wts = torch.load('./model/pyramidnet101_360.pth')
+    # net.load_state_dict(wts)
+    # net.fc = head
     log.info(f'network: {net}')
     if cfg.exp.tiny_tl:
         tinytlb(net)
@@ -76,8 +76,7 @@ def main(cfg:DictConfig) -> None:
 
     if cfg.exp.reg_off:
         log.info(f'additional training with weaker or no regularization')
-        image_datasets = get_dataset(datacfg=cfg.dataset)
-        image_datasets['train'] = image_datasets['val']
+        image_datasets = get_dataset(datacfg=cfg.dataset, regoff=True)
         stats = load_checkpoint(exp_path, True)
         net.load_state_dict(stats['net_state_dict'])
         #TODO: weaker weight decay

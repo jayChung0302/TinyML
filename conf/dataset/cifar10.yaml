@@ -16,3 +16,15 @@ val_transform: [
 randaug: 
   N: 3
   M: 9
+regoff:
+  num_classes: 10
+  mean: [0.4914, 0.4822, 0.4465]
+  std: [0.2470, 0.2435, 0.2616]
+  train_transform: [
+  [Resize, 224],
+  ToTensor,
+  Normalize]
+  val_transform: [
+  [Resize, 224],
+  ToTensor,
+  Normalize]

@@ -4,9 +4,9 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from RandAugment import RandAugment
 
-def get_dataset(datacfg):
+def get_dataset(datacfg, regoff=False):
     image_datasets = {}
-    data_transforms = get_transform(datacfg)
+    data_transforms = get_transform(datacfg, regoff)
     if datacfg.name in datasets.__dict__.keys():
         image_datasets['train'] = getattr(datasets, datacfg.name)(root='./dataset', train=True, download=True, transform=data_transforms['train_transform'])
         image_datasets['val'] = getattr(datasets, datacfg.name)(root='./dataset', train=False, download=True, transform=data_transforms['val_transform'])
@@ -15,7 +15,7 @@ def get_dataset(datacfg):
             image_datasets[x] = datasets.ImageFolder(os.path.join(datacfg.data_dir, x), data_transforms[y])
     return image_datasets
 
-def get_transform(datacfg):
+def get_transform(datacfg, regoff=False):
     data_transforms = {}
     for mode in ['train_transform', 'val_transform']:
         config_ls = getattr(datacfg, mode)
@@ -41,6 +41,7 @@ def get_transform(datacfg):
         data_transforms[mode] = transforms.Compose(transform_ls)
         if mode == 'train_transform':
             N, M = datacfg.randaugment.N, datacfg.randaugment.M
-            data_transforms[mode].transforms.insert(0, RandAugment(N, M))        
-
+            data_transforms[mode].transforms.insert(0, RandAugment(N, M))
+    if regoff:        
+        data_transforms['train_transform'] = data_transforms['val_transform']
     return data_transforms

@@ -65,7 +65,8 @@ def switch_head(net, num_classes):
         is_bias = True if last_conv.bias is not None else False
         setattr(net, head_name, nn.Linear(last_conv.in_features, num_classes, bias=is_bias))
         return net
-        
+    #TODO: need to support fully conv layer / head may not be located on the last layer
+
 if __name__ == '__main__':
     net1 = models.resnet50()
     net2 = models.vgg16()
