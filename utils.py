@@ -5,6 +5,8 @@ import os
 import shutil
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 def create_exp_dir(path):
 	if not os.path.exists(path):
@@ -39,3 +41,9 @@ def accuracy(output, target, topk=(1,)):
 		correct_k = correct[:k].view(-1).float().sum(0)
 		res.append(correct_k.mul_(100.0 / batch_size))
 	return res
+
+def kd_loss(y, labels, teacher_scores, T, alpha):
+    # distll loss
+    return nn.KLDivLoss()(F.log_softmax(y/T), \
+		F.softmax(teacher_scores/T)) * (T*T * 2.0 + alpha) + F.cross_entropy(y,labels) * (1.-alpha)
+
