@@ -47,3 +47,39 @@ def kd_loss(y, labels, teacher_scores, T, alpha):
     return nn.KLDivLoss()(F.log_softmax(y/T), \
 		F.softmax(teacher_scores/T)) * (T*T * 2.0 + alpha) + F.cross_entropy(y,labels) * (1.-alpha)
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+	
+def computeTime(model, device='cuda'):
+	from thop import profile
+	from thop import clever_format
+	import time
+	inputs = torch.randn(1, 3, 224, 224) # input image 3ch for 3, 1ch for 1
+	if device == 'cuda':
+		model = model.cuda()
+		inputs = inputs.cuda()
+
+	model.eval()
+
+	i = 0
+	time_spent = []
+	while i < 100:
+		start_time = time.time()
+		with torch.no_grad():
+			out = model(inputs)
+
+		if device == 'cuda':
+			torch.cuda.synchronize()  # wait for cuda to finish (cuda is asynchronous!)
+		if i != 0:
+			time_spent.append(time.time() - start_time)
+		i += 1
+	print('Avg execution time: {:.3f}'.format(np.mean(time_spent)))
+	print(np.mean(time_spent))
+
+if __name__ == '__main__':
+	import torchvision.models as models
+	net = models.resnet50()
+	net.cuda()
+	input = torch.randn(1, 3, 224, 224).cuda()
+	flops, params = profile(net, inputs=(input, ))
+	flops, params = clever_format([flops, params], "%.3f")
