@@ -2,7 +2,7 @@ import os, sys
 import omegaconf
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from RandAugment import RandAugment
+from augmentation.RandAugment import RandAugment
 
 def get_dataset(datacfg, regoff=False):
     image_datasets = {}

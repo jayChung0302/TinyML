@@ -10,7 +10,6 @@ __all__ = ['tinytlb', 'enable_bn_update', 'set_module_grad_status']
 
 def tinytlb(net):
     """freeze weight, set bias trainable"""
-    set_module_grad_status(net, False)
     for layer in net.modules():
         for name, params in layer.named_parameters():
             if name == 'bias':
