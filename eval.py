@@ -30,9 +30,6 @@ log = logging.getLogger(__name__)
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg:DictConfig) -> None:
     exp_path = os.path.join(cfg.exp.save_path, cfg.exp.exp_name)
-    create_exp_dir(exp_path)
-    if cfg.exp.use_amp:
-        from apex import amp
     if cfg.exp.use_cuda:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         pin_memory = True
@@ -45,8 +42,7 @@ def main(cfg:DictConfig) -> None:
     net = get_model(cfg)
 
     log.info(f'network: {net}')
-    if cfg.exp.tiny_tl:
-        tinytlb(net)
+    
     net = net.to(device)
     loss_fn = nn.CrossEntropyLoss().to(device)
     optimizer = get_optimizer(net, cfg.optimizer, cfg.params.lr, cfg.exp.use_lars)
@@ -61,7 +57,6 @@ def main(cfg:DictConfig) -> None:
     image_datasets = get_dataset(datacfg=cfg.dataset)
     
     if cfg.exp.use_amp:
-        # amp initialization
         net, optimizer = amp.initialize(net, optimizer, opt_level="O1")
     
     net, optimizer, scheduler = trainer(net, image_datasets, cfg, loss_fn, optimizer, scheduler, \

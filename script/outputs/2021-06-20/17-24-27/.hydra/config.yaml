@@ -1,0 +1,56 @@
+dataset:
+  name: CIFAR10
+  num_classes: 10
+  mean:
+  - 0.4914
+  - 0.4822
+  - 0.4465
+  std:
+  - 0.247
+  - 0.2435
+  - 0.2616
+  train_transform:
+  - - RandomResizedCrop
+    - 224
+  - RandomHorizontalFlip
+  - - RandomRotation
+    - 30
+  - ToTensor
+  - Normalize
+  val_transform:
+  - - Resize
+    - 224
+  - ToTensor
+  - Normalize
+optimizer:
+  name: adam
+  momentum: 0.99
+  weight_decay: 0.001
+scheduler:
+  name: cosine_anneal
+  T_max: 10
+  eta_min: 0
+model: {}
+augment:
+  name: randaugment
+  'n': 3
+  m: 13
+  augment_list: []
+params:
+  num_epoch: 100
+  batch_size: 64
+  lr: 0.01
+exp:
+  data_dir: /dataset
+  exp_name: dryrun
+  checkpoint_path: checkpoint
+  save_path: exp
+  log_cycle: 0.1
+  is_continue: false
+  load_path: null
+  use_cuda: false
+  use_amp: false
+  use_lars: false
+  reg_off: false
+  extra_epoch: 1
+  tiny_tl: false
