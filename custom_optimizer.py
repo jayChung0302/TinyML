@@ -27,6 +27,10 @@ def get_scheduler(schedulecfg, optimizer):
     if schedulecfg.name == 'step_lr':
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, schedulecfg.step_size, \
             gamma=schedulecfg.gamma, last_epoch=schedulecfg.last_epoch, verbose=schedulecfg.verbose)
+    
+    if schedulecfg.name == 'multi_step_lr':
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, schedulecfg.schedule)
+        # (optimizer, milestones, gamma=0.1, last_epoch=-1, verbose=False)
 
     return scheduler
 
