@@ -9,7 +9,7 @@ import numpy as np
 
 model = resnet50(pretrained=True)
 target_layer = model.layer4[-1]
-input = Image.open('Image.jpeg')
+input = Image.open('../Image.jpeg')
 transform = transforms.Compose([
     # transforms.Resize((224,224)),
     transforms.ToTensor()
@@ -25,7 +25,7 @@ cam = GradCAM(model=model, target_layer=target_layer, use_cuda=False)
 # will be used for every image in the batch.
 # target_category can also be an integer, or a list of different integers
 # for every image in the batch.
-target_category = 0
+target_category = 1
 
 # You can also pass aug_smooth=True and eigen_smooth=True, to apply smoothing.
 grayscale_cam = cam(input_tensor=input_tensor.unsqueeze(0), target_category=target_category)
@@ -37,6 +37,6 @@ x = np.transpose(x, (1,2,0))
 visualization = show_cam_on_image(x, grayscale_cam)
 print(grayscale_cam.shape)
 
-plt.imsave('awef2.jpg',visualization)
+plt.imsave('awef3.jpg',visualization)
 plt.imshow(visualization)
 
